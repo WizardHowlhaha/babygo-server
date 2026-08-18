@@ -1,0 +1,17 @@
+# 一键启动带 PostGIS 的 PostgreSQL: npm run db:up
+services:
+  db:
+    image: postgis/postgis:16-3.4
+    container_name: babygo-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: babygo
+      POSTGRES_PASSWORD: babygo_pass
+      POSTGRES_DB: babygo
+    ports:
+      - "5432:5432"
+    volumes:
+      - babygo_pgdata:/var/lib/postgresql/data
+      - ./db/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+volumes:
+  babygo_pgdata:
