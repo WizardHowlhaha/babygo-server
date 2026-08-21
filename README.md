@@ -7,7 +7,8 @@ BabyGo 亲子社交 App 的后端基线。技术栈 **Node.js + Express + Postgr
 - 手机验证码注册/登录/找回(**仅开发桩**，`ALLOW_INSECURE_DEV_AUTH=true` 时返回固定验证码 `123456`)
 - 微信授权登录(**预留桩**,未配置时返回 501 提示)
 - 发布动态(文字/图片/视频)+ 动态流(游标分页)+ 点赞 + 评论
-- 遛娃活动发布/加入/审核/邀请 + **基于地理位置的"附近活动发现"**(PostGIS)
+- 遛娃活动快速发布/加入/审核/邀请：活动类型、常用时长、可选人数上限、玩具/宠物共享清单
+- **基于地理位置的"附近活动发现"**(PostGIS)
 - 好友请求/通过/列表、拉黑、举报
 - 媒体上传凭证(**未实现 provider**，不会返回伪签名 URL)
 - 内容安全校验(拦截联系方式与不适宜词汇,保护儿童安全)
@@ -82,7 +83,9 @@ npm run smoke
 `GET /feed`(成长圈游标分页) · `GET /mine`(当前账号动态游标分页) · `POST /`(发布，支持公开/好友/仅自己/指定好友) · `PATCH /:id/visibility`(修改可见范围) · `POST /:id/like`(点赞,幂等) · `DELETE /:id`(软删除) · `GET|POST /:postId/comments`(评论)
 
 ### 活动 `/api/plans`
-`POST /`(发布,含经纬度) · `GET /nearby?lat=&lng=&radius=`(附近发现) · `GET /mine` · `GET /:id`(详情+成员) · `POST /:id/apply`(申请) · `POST /:id/review`(主审核) · `POST /:id/respond`(回应邀请) · `POST /:id/invite`(邀请) · `DELETE /:id`(取消)
+`POST /`(发布,含经纬度、`activityKind`、可空的 `participantLimit`、`sharedToys` 与 `sharedPets`) · `GET /nearby?lat=&lng=&radius=`(附近发现) · `GET /mine` · `GET /:id`(详情+成员) · `POST /:id/apply`(申请) · `POST /:id/review`(主审核) · `POST /:id/respond`(回应邀请) · `POST /:id/invite`(邀请) · `DELETE /:id`(取消)
+
+活动类型取值为 `outdoor`、`mall`、`pet`、`custom`。`participantLimit: null` 表示不限人数；设置上限时范围仍为 2-20 人。共享清单只接受客户端展示的预置常见玩具和宠物，服务端会去重并校验。
 
 ### 好友 `/api/friends`
 `GET /` · `GET /requests` · `POST /requests` · `POST /requests/:id/respond` · `POST /block` · `DELETE /block/:userId` · `POST /report`

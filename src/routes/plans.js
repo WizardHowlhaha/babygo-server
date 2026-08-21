@@ -11,15 +11,37 @@ const { requirePositiveIntegerParam } = require('../middleware/validateRequest')
 const router = express.Router();
 router.param('id', requirePositiveIntegerParam('id'));
 
+const ACTIVITY_KINDS = new Set(['outdoor', 'mall', 'pet', 'custom']);
+const SHAREABLE_TOYS = new Set([
+  '汽车模型', '电动骑乘玩具车', '恐龙模型', '机器狗', '篮球',
+  '足球', '滑板车', '泡泡机', '沙滩玩具', '绘本',
+]);
+const SHAREABLE_PETS = new Set(['猫', '狗', '兔子', '仓鼠', '豚鼠', '龙猫', '鹦鹉']);
+
+function normalizeSharedItems(value, allowedItems, fieldName) {
+  if (value == null) return [];
+  if (!Array.isArray(value)) {
+    throw new ApiError(400, `${fieldName}格式不正确`, 'BAD_SHARED_ITEMS');
+  }
+  const items = Array.from(new Set(value.map((item) => String(item).trim()).filter(Boolean)));
+  if (items.length > 10 || items.some((item) => !allowedItems.has(item))) {
+    throw new ApiError(400, `${fieldName}包含不支持的选项`, 'BAD_SHARED_ITEMS');
+  }
+  return items;
+}
+
 // 发布活动: POST /plans
 router.post('/', requireAuth, asyncHandler(async (req, res) => {
   const title = String(req.body.title || '').trim();
+  const activityKind = String(req.body.activityKind || 'custom').trim();
   const summary = String(req.body.summary || '').trim();
   const startsAt = req.body.startsAt;
   const duration = req.body.durationMinutes ?? 60;
-  const limit = req.body.participantLimit ?? 4;
+  const limit = req.body.participantLimit == null ? null : req.body.participantLimit;
   const approx = String(req.body.approximatePlace || '').trim();
   const priv = String(req.body.privateMeetingPoint || '').trim();
+  const sharedToys = normalizeSharedItems(req.body.sharedToys, SHAREABLE_TOYS, '共享玩具');
+  const sharedPets = normalizeSharedItems(req.body.sharedPets, SHAREABLE_PETS, '共享宠物');
   const lat = Number(req.body.latitude);
   const lng = Number(req.body.longitude);
   const visibility = req.body.visibility ?? 0;
@@ -30,6 +52,7 @@ router.post('/', requireAuth, asyncHandler(async (req, res) => {
   const invitedUserIds = Array.from(new Set(rawInvitees.map(String)));
 
   if (!title) throw new ApiError(400, '请填写活动标题', 'EMPTY_TITLE');
+  if (!ACTIVITY_KINDS.has(activityKind)) throw new ApiError(400, '活动类型不正确', 'BAD_ACTIVITY_KIND');
   if (![0, 1].includes(visibility)) throw new ApiError(400, '活动可见范围不正确', 'BAD_VISIBILITY');
   if (title.length > 50) throw new ApiError(400, '标题不能超过 50 字', 'TITLE_TOO_LONG');
   if (summary.length > 500) throw new ApiError(400, '活动介绍不能超过 500 字', 'SUMMARY_TOO_LONG');
@@ -39,7 +62,7 @@ router.post('/', requireAuth, asyncHandler(async (req, res) => {
   if (typeof duration !== 'number' || !Number.isInteger(duration) || duration < 30 || duration > 360) {
     throw new ApiError(400, '活动时长需在 30-360 分钟之间', 'BAD_DURATION');
   }
-  if (typeof limit !== 'number' || !Number.isInteger(limit) || limit < 2 || limit > 20) {
+  if (limit != null && (typeof limit !== 'number' || !Number.isInteger(limit) || limit < 2 || limit > 20)) {
     throw new ApiError(400, '人数上限需在 2-20 之间', 'BAD_LIMIT');
   }
   if (!approx || approx.length > 100) throw new ApiError(400, '请填写 100 字以内的大致区域', 'BAD_PLACE');
@@ -53,7 +76,11 @@ router.post('/', requireAuth, asyncHandler(async (req, res) => {
   ) {
     throw new ApiError(400, '邀请名单包含无效用户', 'BAD_INVITEES');
   }
-  if (!isContentSafe(title) || !isContentSafe(summary) || !isContentSafe(approx) || !isContentSafe(priv)) {
+  if (
+    !isContentSafe(title) || !isContentSafe(summary) || !isContentSafe(approx) || !isContentSafe(priv)
+    || sharedToys.some((item) => !isContentSafe(item))
+    || sharedPets.some((item) => !isContentSafe(item))
+  ) {
     throw new ApiError(400, '内容可能包含联系方式或不适宜信息，请修改后再发布', 'BLOCKED_CONTENT');
   }
 
@@ -69,10 +96,14 @@ router.post('/', requireAuth, asyncHandler(async (req, res) => {
 
     const { rows } = await client.query(
       `INSERT INTO walk_plans
-        (owner_id,title,summary,starts_at,duration_minutes,participant_limit,approximate_place,geo,private_meeting_point,visibility,status)
-        VALUES ($1,$2,$3,$4,$5,$6,$7,ST_SetSRID(ST_MakePoint($8,$9),4326)::geography,$10,$11,1)
+        (owner_id,title,activity_kind,summary,starts_at,duration_minutes,participant_limit,approximate_place,
+         geo,private_meeting_point,shared_toys,shared_pets,visibility,status)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,ST_SetSRID(ST_MakePoint($9,$10),4326)::geography,$11,$12,$13,$14,1)
         RETURNING *`,
-      [req.userId, title, summary, startsAt, duration, limit, approx, lng, lat, priv, visibility]
+      [
+        req.userId, title, activityKind, summary, startsAt, duration, limit, approx,
+        lng, lat, priv, sharedToys, sharedPets, visibility,
+      ]
     );
     await client.query('INSERT INTO plan_members (plan_id,user_id,status) VALUES ($1,$2,2)', [rows[0].id, req.userId]);
     if (invitedUserIds.length > 0) {
@@ -243,7 +274,9 @@ router.post('/:id/apply', requireAuth, asyncHandler(async (req, res) => {
       if (exist[0].status === 0) throw new ApiError(409, '你有待处理的活动邀请', 'INVITATION_PENDING');
     }
     const { rows: cnt } = await client.query('SELECT COUNT(*)::int AS n FROM plan_members WHERE plan_id = $1 AND status = 2', [planId]);
-    if (cnt[0].n >= plan.participant_limit) throw new ApiError(409, '活动人数已满', 'PLAN_FULL');
+    if (plan.participant_limit != null && cnt[0].n >= Number(plan.participant_limit)) {
+      throw new ApiError(409, '活动人数已满', 'PLAN_FULL');
+    }
     // status=1 申请中(等活动主审核)
     await client.query(
       `INSERT INTO plan_members (plan_id,user_id,status) VALUES ($1,$2,1)
@@ -270,7 +303,9 @@ router.post('/:id/respond', requireAuth, asyncHandler(async (req, res) => {
       return;
     }
     const { rows: cnt } = await client.query('SELECT COUNT(*)::int AS n FROM plan_members WHERE plan_id = $1 AND status = 2', [planId]);
-    if (cnt[0].n >= plan.participant_limit) throw new ApiError(409, '活动人数已满', 'PLAN_FULL');
+    if (plan.participant_limit != null && cnt[0].n >= Number(plan.participant_limit)) {
+      throw new ApiError(409, '活动人数已满', 'PLAN_FULL');
+    }
     await client.query('UPDATE plan_members SET status = 2 WHERE plan_id = $1 AND user_id = $2', [planId, me]);
   });
   res.json({ ok: true, data: { memberStatus: accept ? 2 : null } });
@@ -294,7 +329,9 @@ router.post('/:id/review', requireAuth, asyncHandler(async (req, res) => {
       return;
     }
     const { rows: cnt } = await client.query('SELECT COUNT(*)::int AS n FROM plan_members WHERE plan_id = $1 AND status = 2', [planId]);
-    if (cnt[0].n >= plan.participant_limit) throw new ApiError(409, '活动人数已满', 'PLAN_FULL');
+    if (plan.participant_limit != null && cnt[0].n >= Number(plan.participant_limit)) {
+      throw new ApiError(409, '活动人数已满', 'PLAN_FULL');
+    }
     await client.query('UPDATE plan_members SET status = 2 WHERE plan_id = $1 AND user_id = $2', [planId, targetUser]);
   });
   res.json({ ok: true });

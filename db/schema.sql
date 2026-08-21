@@ -92,18 +92,22 @@ CREATE TABLE IF NOT EXISTS walk_plans (
     id                    BIGSERIAL PRIMARY KEY,
     owner_id              BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     title                 VARCHAR(50) NOT NULL,
+    activity_kind         VARCHAR(30) NOT NULL DEFAULT 'custom',
     summary               VARCHAR(500) DEFAULT '',
     starts_at             TIMESTAMPTZ NOT NULL,
     duration_minutes      INT NOT NULL DEFAULT 60,
-    participant_limit     INT NOT NULL DEFAULT 4,
+    participant_limit     INT DEFAULT NULL,             -- NULL 表示不限人数
     approximate_place     VARCHAR(100) DEFAULT '',     -- 【公开】模糊地点
     private_meeting_point VARCHAR(200) DEFAULT '',     -- 【私密】仅成员可见
+    shared_toys           TEXT[] NOT NULL DEFAULT '{}',
+    shared_pets           TEXT[] NOT NULL DEFAULT '{}',
     geo                   GEOGRAPHY(POINT, 4326),      -- 经纬度点
     visibility            SMALLINT DEFAULT 0,          -- 0附近可见 1仅好友
     status                SMALLINT DEFAULT 1,
     created_at            TIMESTAMPTZ DEFAULT NOW(),
     CONSTRAINT walk_plans_duration_valid CHECK (duration_minutes BETWEEN 30 AND 360),
-    CONSTRAINT walk_plans_participant_limit_valid CHECK (participant_limit BETWEEN 2 AND 20),
+    CONSTRAINT walk_plans_participant_limit_valid CHECK (participant_limit IS NULL OR participant_limit BETWEEN 2 AND 20),
+    CONSTRAINT walk_plans_activity_kind_valid CHECK (activity_kind IN ('outdoor', 'mall', 'pet', 'custom')),
     CONSTRAINT walk_plans_visibility_valid CHECK (visibility IN (0, 1)),
     CONSTRAINT walk_plans_status_valid CHECK (status IN (1, 2))
 );

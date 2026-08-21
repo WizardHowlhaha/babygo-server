@@ -103,14 +103,24 @@ async function api(method, path, body, token) {
   // 发活动(带定位)
   const startsAt = new Date(Date.now() + 3600 * 1000).toISOString();
   const plan = await api('POST', '/api/plans', {
-    title: '周末公园遛娃局', summary: '带宝宝一起玩', startsAt,
-    durationMinutes: 90, participantLimit: 4,
+    title: '萌宠互动', activityKind: 'pet', summary: '带宝宝和温顺小狗互动', startsAt,
+    durationMinutes: 90, participantLimit: null,
     approximatePlace: '朝阳公园附近', privateMeetingPoint: '南门肯德基门口',
+    sharedToys: ['篮球', '泡泡机'], sharedPets: ['狗'],
     latitude: 39.9388, longitude: 116.4774, visibility: 0,
   }, tokenA);
   ok('POST /api/plans 发布活动', plan.status === 200 && plan.json.ok, plan.json);
   const planId = plan.json && plan.json.data && plan.json.data.id;
   ok('活动主可见私密集合点', plan.json && plan.json.data && plan.json.data.privateMeetingPoint === '南门肯德基门口');
+  ok('活动支持不限人数', plan.json && plan.json.data && plan.json.data.participantLimit === null);
+  ok(
+    '活动保留类型与共享清单',
+    plan.json && plan.json.data
+      && plan.json.data.activityKind === 'pet'
+      && plan.json.data.sharedToys.includes('篮球')
+      && plan.json.data.sharedPets.includes('狗'),
+    plan.json && plan.json.data
+  );
 
   // 附近发现(B 用户在附近)
   const nearby = await api('GET', '/api/plans/nearby?lat=39.9390&lng=116.4770&radius=5000', null, tokenB);

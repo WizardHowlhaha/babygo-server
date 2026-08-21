@@ -11,12 +11,15 @@ function planRow() {
     avatar: '',
     is_verified: false,
     title: '公园遛娃',
+    activity_kind: 'pet',
     summary: '周末见',
     starts_at: new Date('2026-08-20T02:00:00Z'),
     duration_minutes: 90,
     participant_limit: 4,
     approximate_place: '公园附近',
     private_meeting_point: '南门入口',
+    shared_toys: ['篮球', '泡泡机'],
+    shared_pets: ['狗'],
     latitude: 31.215234,
     longitude: 121.551345,
     visibility: 0,
@@ -48,9 +51,17 @@ test('non-members receive redacted location and rounded distance', () => {
 test('accepted members receive precise location', () => {
   const shaped = shapePlan(planRow(), 2, true);
   assert.equal(shaped.privateMeetingPoint, '南门入口');
+  assert.equal(shaped.activityKind, 'pet');
+  assert.deepEqual(shaped.sharedToys, ['篮球', '泡泡机']);
+  assert.deepEqual(shaped.sharedPets, ['狗']);
   assert.equal(shaped.latitude, 31.215234);
   assert.equal(shaped.longitude, 121.551345);
   assert.equal(shaped.distanceMeters, 1234);
+});
+
+test('unlimited plans expose a null participant limit', () => {
+  const shaped = shapePlan({ ...planRow(), participant_limit: null }, 2, true);
+  assert.equal(shaped.participantLimit, null);
 });
 
 test('public distance is derived from the approximate coordinate', () => {
