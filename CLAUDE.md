@@ -6,6 +6,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Node.js + Express 后端服务，为 BabyGo iOS 应用提供 API。
 
+> **关联项目**: 本项目与 `babygo/` iOS 客户端共同组成 BabyGo 应用。
+
 ## 常用命令
 
 ```bash
