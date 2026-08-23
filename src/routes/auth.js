@@ -125,7 +125,9 @@ router.post('/login', credentialLimiter, asyncHandler(async (req, res) => {
   const { password } = req.body;
   if (!isValidPhone(phone)) throw new ApiError(400, '请输入正确的 11 位手机号', 'INVALID_PHONE');
   const user = await findUserByPhone(phone);
-  const ok = user ? await verifyPassword(password, user.password_hash) : false;
+  // Use a dummy hash for non-existent users to eliminate timing oracle
+  const hash = user ? user.password_hash : '$2b$10$xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx';
+  const ok = await verifyPassword(password, hash);
   if (!ok) throw new ApiError(401, '手机号或密码不正确', 'WRONG_CREDENTIALS');
   res.json({ ok: true, data: issueSession(user) });
 }));
@@ -292,7 +294,9 @@ router.post("/login-username", credentialLimiter, asyncHandler(async (req, res) 
     throw new ApiError(400, "用户名需 4-20 位，以字母开头，仅含字母、数字或下划线", "INVALID_USERNAME");
   }
   const user = await findUserByUsername(username);
-  const ok = user?.password_hash ? await verifyPassword(password, user.password_hash) : false;
+  // Use a dummy hash for non-existent users to eliminate timing oracle
+  const hash = user ? user.password_hash : '$2b$10$xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx';
+  const ok = await verifyPassword(password, hash);
   if (!ok) throw new ApiError(401, "用户名或密码不正确", "WRONG_CREDENTIALS");
   res.json({ ok: true, data: issueSession(user) });
 }));
